@@ -42,8 +42,8 @@
     <!-- Contenedor Principal -->
     <div class="max-w-md w-full mx-auto bg-white rounded-xl shadow-2xl p-6 space-y-6">
 
-        <h1 class="text-3xl font-bold text-center text-gray-800">Escáner de Inventario</h1>
-        <p class="text-center text-gray-600 text-sm">Apunta la cámara al código de barras.</p>
+        <h1 class="text-3xl font-bold text-center text-gray-800">TRANSITO DE HU A RACK</h1>
+        <p class="text-center text-gray-600 text-sm">Apunta la cámara al código de barras de la HU.</p>
         
         <!-- Área de Previsualización de la Cámara -->
         <div id="interactive" class="viewport shadow-inner bg-gray-900 flex items-center justify-center">
@@ -52,7 +52,7 @@
 
         <!-- Panel de Resultado del Escaneo -->
         <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-900 p-4 rounded-md shadow-md">
-            <p class="font-semibold mb-1">Código Leído:</p>
+            <p class="font-semibold mb-1">HU Leído:</p>
             <div id="result" class="text-xl font-mono break-all bg-white p-2 rounded-lg border border-blue-200 min-h-[40px]">
                 Esperando escaneo...
             </div>
@@ -65,7 +65,7 @@
             <button id="sendButton"
                     class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-150 ease-in-out disabled:opacity-50"
                     disabled>
-                <span id="sendText">Enviar Código a Google Sheet</span>
+                <span id="sendText">Enviar HU</span>
                 <span id="loadingSpinner" class="hidden h-5 w-5 border-4 border-white border-t-transparent rounded-full animate-spin inline-block align-middle"></span>
             </button>
             <button id="restartButton"
@@ -288,7 +288,7 @@
                 });
 
                 // Mensaje de éxito informando el código que realmente se envió
-                showModal('¡Éxito!', `Código original: "${lastBarcode}". Enviado a la hoja: "${trimmedBarcode}".`);
+                showModal('¡Éxito!', `HU enviado: "${trimmedBarcode}".`);
 
                 // Preparar para el próximo escaneo
                 lastBarcode = null;
@@ -329,3 +329,4 @@
     </script>
 </body>
 </html>
+
