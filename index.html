@@ -3,211 +3,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner a Google Sheets</title>
-    <!-- Carga de Tailwind CSS -->
+    <title>Escáner Móvil a Hoja de Cálculo</title>
+    <!-- Carga de Tailwind CSS para un diseño responsivo -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Carga de la biblioteca ZXing (para escaneo de códigos) -->
-    <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+    <!-- Carga de la librería QuaggaJS para escaneo de códigos de barras -->
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
     <style>
-        /* Estilo personalizado para el video/cámara que se adaptará al contenedor */
-        #scanner-container {
-            position: relative;
+        /* Estilos personalizados para el contenedor del video y la orientación */
+        #interactive.viewport {
             width: 100%;
-            max-width: 400px;
+            max-width: 400px; /* Ancho máximo para mejor visualización móvil */
+            height: 300px;
             margin: 0 auto;
-            aspect-ratio: 1 / 1; /* Cuadrado para una mejor vista móvil */
+            position: relative;
             overflow: hidden;
-            border-radius: 1rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            background-color: #374151; /* Fondo oscuro mientras espera */
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         }
-        #scanner-video {
+        #interactive.viewport video {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* Asegura que el video llene el contenedor */
-            /* No aplicar espejo (transform: scaleX(-1)) ya que usaremos la cámara trasera */
+            object-fit: cover; /* Asegura que el video cubra el área */
+        }
+        /* Resalta el área de detección (el marco rojo) */
+        .drawingBuffer {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        /* Ocultar el botón de reinicio al inicio */
+        #restartButton {
+            display: none;
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-4 flex flex-col items-center font-sans">
+<body class="bg-gray-100 min-h-screen flex flex-col p-4 font-sans antialiased">
 
-    <div class="w-full max-w-lg bg-white p-6 rounded-xl shadow-2xl space-y-6">
-        <h1 class="text-3xl font-extrabold text-blue-600 text-center">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8 inline-block mr-2 align-text-bottom">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.5h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5M7.5 4.5v16.5m3-16.5v16.5m3-16.5v16.5m3-16.5v16.5" />
-            </svg>
-            Escáner Móvil a Sheets
-        </h1>
+    <!-- Contenedor Principal -->
+    <div class="max-w-md w-full mx-auto bg-white rounded-xl shadow-2xl p-6 space-y-6">
 
-        <!-- Contenedor del Video de la Cámara -->
-        <div id="scanner-container">
-            <video id="scanner-video" class="w-full h-full object-cover" playsinline></video>
+        <h1 class="text-3xl font-bold text-center text-gray-800">Escáner de Inventario Multi-Usuario</h1>
+        <p class="text-center text-gray-600 text-sm">Apunta la cámara al código de barras.</p>
+
+        <!-- Área de Previsualización de la Cámara -->
+        <div id="interactive" class="viewport shadow-inner bg-gray-900 flex items-center justify-center">
+            <div class="text-white text-center">Cargando Cámara...</div>
         </div>
 
-        <!-- Resultados y Estado -->
-        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p class="text-sm font-medium text-gray-500">Último Código Escaneado:</p>
-            <p id="barcode-result" class="text-2xl font-bold text-gray-800 break-words mt-1">Presiona "Iniciar Escaneo"</p>
+        <!-- Panel de Resultado del Escaneo -->
+        <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-900 p-4 rounded-md shadow-md">
+            <p class="font-semibold mb-1">Código Leído:</p>
+            <div id="result" class="text-xl font-mono break-all bg-white p-2 rounded-lg border border-blue-200 min-h-[40px]">
+                Esperando escaneo...
+            </div>
+            <div id="error-message" class="text-red-600 mt-2 hidden text-sm"></div>
         </div>
 
-        <!-- Indicador de Estado/Carga -->
-        <div id="status-message" class="p-3 rounded-lg text-center font-semibold transition duration-300 hidden"></div>
+        <!-- Botones de Acción -->
+        <div class="flex flex-col space-y-3">
+            <button id="sendButton"
+                    class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-150 ease-in-out disabled:opacity-50"
+                    disabled>
+                <span id="sendText">Enviar Código a Google Sheet</span>
+                <span id="loadingSpinner" class="hidden h-5 w-5 border-4 border-white border-t-transparent rounded-full animate-spin inline-block align-middle"></span>
+            </button>
+            <button id="restartButton"
+                    class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-xl shadow-lg transition duration-150 ease-in-out">
+                Escanear de Nuevo
+            </button>
+        </div>
 
-        <!-- Botón de Control -->
-        <button id="start-scan-btn" class="w-full py-3 bg-green-500 text-white font-bold rounded-xl shadow-lg hover:bg-green-600 transition duration-150 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-green-300">
-            Iniciar Escaneo
-        </button>
+        <!-- Modal de Notificación (Reemplaza a alert()) -->
+        <div id="statusModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center p-4 z-50">
+            <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
+                <h3 id="modalTitle" class="text-lg font-semibold mb-2 text-gray-900"></h3>
+                <p id="modalMessage" class="text-gray-600 mb-4"></p>
+                <button id="closeModal" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg">Cerrar</button>
+            </div>
+        </div>
+
     </div>
 
     <script>
-        // Configuración de Firebase para obtener el ID de la aplicación
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        // ***********************************************************************************
-        // IMPORTANTE: Reemplaza esta URL con la URL de tu Google Apps Script Desplegado.
-        // ***********************************************************************************
-        const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';
-        // ***********************************************************************************
-        
-        const codeReader = new ZXing.BrowserMultiFormatReader();
-        const videoElement = document.getElementById('scanner-video');
-        const resultElement = document.getElementById('barcode-result');
-        const statusElement = document.getElementById('status-message');
-        const startBtn = document.getElementById('start-scan-btn');
+        // --- VARIABLES DE CONFIGURACIÓN (ACTUALIZAR ESTOS VALORES) ---
+        // 1. URL de envío del formulario de Google (URL de action del form, VER NOTAS)
+        const FORM_URL = 'REEMPLAZAR_CON_LA_URL_DEL_FORMULARIO_DE_GOOGLE';
+        // 2. ID de la entrada del campo de texto en el formulario (e.g., entry.123456789)
+        const FORM_ENTRY_ID = 'REEMPLAZAR_CON_LA_ID_DE_ENTRADA';
 
-        let isScanning = false;
+        // --- REFERENCIAS DOM ---
+        const resultDisplay = document.getElementById('result');
+        const sendButton = document.getElementById('sendButton');
+        const restartButton = document.getElementById('restartButton');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const sendText = document.getElementById('sendText');
+        const errorMessageDisplay = document.getElementById('error-message');
+        const interactiveContainer = document.getElementById('interactive');
 
-        // Función para mostrar mensajes de estado
-        function showStatus(message, type = 'info') {
-            statusElement.textContent = message;
-            statusElement.classList.remove('hidden', 'bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800', 'bg-blue-100', 'text-blue-800');
+        // --- ESTADO GLOBAL ---
+        let lastBarcode = null;
+        let isSending = false;
+        let scannerRunning = false;
+        let isQuaggaInitialized = false;
 
-            if (type === 'error') {
-                statusElement.classList.add('bg-red-100', 'text-red-800');
-            } else if (type === 'success') {
-                statusElement.classList.add('bg-green-100', 'text-green-800');
-            } else { // info/loading
-                statusElement.classList.add('bg-blue-100', 'text-blue-800');
-            }
+        // --- FUNCIÓN DE UTILIDAD PARA EL MODAL ---
+        function showModal(title, message) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('statusModal').classList.remove('hidden');
         }
 
-        // Función para enviar los datos a Google Sheets
-        async function sendToSheet(barcode) {
-            showStatus('Enviando código: ' + barcode + '...', 'info');
+        // --- FUNCIÓN DE INICIALIZACIÓN DE QUAGGAJS ---
+        function startScanner() {
+            if (scannerRunning) return;
+
+            // Restablece el estado de la UI
+            lastBarcode = null;
+            sendButton.disabled = true;
+            restartButton.style.display = 'none';
+            resultDisplay.textContent = 'Esperando escaneo...';
+            errorMessageDisplay.classList.add('hidden');
             
-            // Detener el escaneo para evitar lecturas duplicadas mientras se envía
-            codeReader.reset();
-            isScanning = false;
-            startBtn.disabled = false;
-            startBtn.textContent = 'Iniciar Escaneo';
-
-
-            const dataToSend = {
-                barcode: barcode,
-                appId: appId,
+            // Configuración para usar la cámara trasera y decodificar EAN/UPC
+            const config = {
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: interactiveContainer,
+                    constraints: {
+                        width: 640,
+                        height: 480,
+                        facingMode: "environment" // Pide la cámara trasera
+                    },
+                },
+                decoder: {
+                    readers: ["ean_reader", "upc_reader", "code_128_reader", "code_39_reader"] // Añadido Code 39
+                }
             };
+            
+            // Muestra mensaje de carga
+            const loadingDiv = document.querySelector('#interactive div');
+            if(loadingDiv) loadingDiv.textContent = 'Cargando Cámara...';
 
-            if (APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
-                showStatus('Error de Configuración: La URL de Apps Script no está configurada.', 'error');
+
+            Quagga.init(config, function(err) {
+                if (err) {
+                    console.error("Error al inicializar Quagga:", err);
+                    errorMessageDisplay.textContent = 'Error al iniciar la cámara: ' + err.message + '. Asegúrate de tener una cámara trasera disponible.';
+                    errorMessageDisplay.classList.remove('hidden');
+                    // Oculta el mensaje de carga en el viewporet
+                    if(loadingDiv) loadingDiv.textContent = 'Error: No se pudo acceder a la cámara.';
+                    return;
+                }
+                Quagga.start();
+                scannerRunning = true;
+                isQuaggaInitialized = true;
+            });
+        }
+
+        // --- MANEJADOR DE ESCANEO EXITOSO ---
+        Quagga.onDetected(function(data) {
+            if (scannerRunning) {
+                lastBarcode = data.codeResult.code;
+                resultDisplay.textContent = lastBarcode;
+                sendButton.disabled = false;
+                restartButton.style.display = 'block';
+
+                // Detener el escáner inmediatamente después de la detección exitosa
+                Quagga.stop();
+                scannerRunning = false;
+                console.log("Escaneo exitoso y detenido. Código:", lastBarcode);
+            }
+        });
+
+        // --- FUNCIÓN PARA ENVIAR DATOS A GOOGLE SHEET VÍA FORMULARIO ---
+        async function sendToGoogleSheet() {
+            if (!lastBarcode || isSending) {
+                return;
+            }
+            if (FORM_URL.includes('REEMPLAZAR') || FORM_ENTRY_ID.includes('REEMPLAZAR')) {
+                showModal('Error de Configuración', 'Las variables FORM_URL y FORM_ENTRY_ID no han sido configuradas. Sigue los pasos de configuración.');
                 return;
             }
 
+            isSending = true;
+            sendButton.disabled = true;
+            sendText.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+            restartButton.disabled = true;
+
+            const formData = new FormData();
+            formData.append(FORM_ENTRY_ID, lastBarcode);
+            
+            // Se usa el modo 'no-cors' para permitir el envío al endpoint de Google Forms sin un servidor
             try {
-                const response = await fetch(APPS_SCRIPT_URL, {
+                const response = await fetch(FORM_URL, {
                     method: 'POST',
-                    mode: 'cors',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(dataToSend)
+                    mode: 'no-cors', 
+                    body: formData
                 });
 
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.status === 'success') {
-                         showStatus('¡Éxito! Datos guardados en la hoja.', 'success');
-                    } else {
-                         showStatus('Error al guardar datos: ' + result.message, 'error');
-                    }
-                } else {
-                    showStatus(`Error HTTP ${response.status}: No se pudo contactar el servidor.`, 'error');
-                }
+                // La respuesta es siempre "opaque" en 'no-cors', asumimos éxito si no hay error de red
+                showModal('¡Éxito!', `Código: "${lastBarcode}" enviado. El próximo usuario puede escanear.`);
+
+                // Preparar para el próximo escaneo
+                lastBarcode = null;
+                resultDisplay.textContent = 'Esperando escaneo...';
+                
             } catch (error) {
-                console.error('Error de red al enviar datos:', error);
-                showStatus('Error de red: Verifica la conexión o la URL del script.', 'error');
-            }
-
-            resultElement.textContent = barcode;
-            setTimeout(() => {
-                resultElement.textContent = 'Presiona "Iniciar Escaneo"';
-                statusElement.classList.add('hidden');
-            }, 3000);
-        }
-
-        // Función principal para iniciar la cámara y el escaneo
-        function startScan() {
-            if (isScanning) return;
-            isScanning = true;
-            startBtn.disabled = true;
-            startBtn.textContent = 'Cargando cámara...';
-            showStatus('Solicitando permiso de cámara...', 'info');
-            resultElement.textContent = 'Buscando cámara...';
-
-            // Comprobación de contexto seguro (HTTPS)
-            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                 showStatus('Error de Seguridad: La cámara requiere HTTPS. Por favor, despliega en un servicio de hosting seguro.', 'error');
-                 isScanning = false;
-                 startBtn.disabled = false;
-                 startBtn.textContent = 'Iniciar Escaneo';
-                 resultElement.textContent = 'Error: No es HTTPS.';
-                 return;
-            }
-
-            // Usamos decodeFromInputVideoDevice con 'environment' para forzar la cámara trasera,
-            // que es lo más común en móviles para escaneo.
-            codeReader.decodeFromInputVideoDevice({ facingMode: 'environment' }, 'scanner-video', (result, err) => {
-                if (result) {
-                    const barcode = result.getText();
-                    console.log('Código detectado:', barcode);
-                    sendToSheet(barcode);
-                }
-
-                if (err && !(err instanceof ZXing.NotFoundException)) {
-                    // Ignoramos el error de "not found", que es normal.
-                    console.error('Error durante la decodificación:', err);
-                }
-            })
-            .catch((err) => {
-                console.error('Error de acceso/detección:', err);
-                isScanning = false;
-                startBtn.disabled = false;
-                startBtn.textContent = 'Iniciar Escaneo';
-                resultElement.textContent = 'Presiona "Iniciar Escaneo"';
-
-                let errorMessage = 'Error al detectar o acceder a la cámara.';
-
-                if (err.name === 'NotAllowedError') {
-                    errorMessage = 'Permiso Denegado: Habilita el acceso a la cámara en la configuración del navegador o del sistema.';
-                } else if (err.name === 'NotFoundError') {
-                    errorMessage = 'Cámara No Encontrada: Asegúrate de que tu dispositivo tenga una cámara y que no esté siendo usada por otra aplicación.';
-                } else if (err.name === 'NotReadableError') {
-                    errorMessage = 'Hardware Ocupado: Otra aplicación está usando la cámara. Ciérrala e intenta de nuevo.';
-                }
-
-                showStatus(errorMessage, 'error');
-            });
-
-            // Si llegamos hasta aquí, asumimos que el proceso de permisos se inició
-            // y solo actualizamos el mensaje de estado si no hay errores inmediatos.
-            if (isScanning) {
-                showStatus('Cámara solicitada. Esperando permiso...', 'info');
-                startBtn.textContent = 'Escaneo activo...';
+                console.error("Error al enviar a Google Sheet:", error);
+                showModal('Error de Envío', 'Hubo un error de conexión al enviar el dato. Verifica la URL del Formulario.');
+            } finally {
+                isSending = false;
+                // El botón de enviar permanece deshabilitado hasta que se escanee un nuevo código.
+                sendText.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+                restartButton.disabled = false;
             }
         }
 
-        // Evento para iniciar el escaneo (iniciado por el usuario)
-        startBtn.addEventListener('click', startScan);
+        // --- MANEJADORES DE EVENTOS ---
+
+        // Inicia el escáner cuando la página se carga
+        window.onload = startScanner;
+
+        // Botón Enviar
+        sendButton.addEventListener('click', sendToGoogleSheet);
+
+        // Botón Escanear de Nuevo (Reinicia el escáner)
+        restartButton.addEventListener('click', function() {
+            if (!scannerRunning) {
+                startScanner();
+            }
+        });
+
+        // Cierre del Modal
+        document.getElementById('closeModal').addEventListener('click', function() {
+            document.getElementById('statusModal').classList.add('hidden');
+        });
         
+        // Ocultar el mensaje de carga cuando Quagga inicia el video
+        Quagga.onImageProcessed(function(result) {
+            if (isQuaggaInitialized) {
+                const loadingDiv = document.querySelector('#interactive div');
+                if (loadingDiv && loadingDiv.textContent === 'Cargando Cámara...') {
+                    loadingDiv.style.display = 'none';
+                }
+            }
+        });
+
     </script>
 </body>
 </html>
