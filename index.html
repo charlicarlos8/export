@@ -90,6 +90,9 @@
         const FORM_URL = 'https://docs.google.com/forms/u/0/d/e/1FAIpQLSfRc0zukVq-xcOlljQVYxVEaS0EV0VI2lcV4TEPj5yZCixwAQ/formResponse';
         // 2. ID de la entrada del campo de texto en el formulario (e.g., entry.123456789)
         const FORM_ENTRY_ID = 'entry.968870866';
+  
+        // --- CONSTANTE DE VALIDACIÓN ---
+        const REQUIRED_LENGTH = 20;
 
         // --- REFERENCIAS DOM ---
         const resultDisplay = document.getElementById('result');
@@ -174,7 +177,17 @@
             if (scannerRunning) {
                 lastBarcode = data.codeResult.code;
                 resultDisplay.textContent = lastBarcode;
-                sendButton.disabled = false;
+                
+                // Verifica la longitud inmediatamente después del escaneo
+                if (lastBarcode.length === REQUIRED_LENGTH) {
+                    sendButton.disabled = false;
+                    errorMessageDisplay.classList.add('hidden');
+                } else {
+                    sendButton.disabled = true;
+                    errorMessageDisplay.textContent = `Código leído (${lastBarcode.length} caracteres) no tiene la longitud requerida de ${REQUIRED_LENGTH} caracteres.`;
+                    errorMessageDisplay.classList.remove('hidden');
+                }
+
                 restartButton.style.display = 'block';
 
                 // Detener el escáner inmediatamente después de la detección exitosa
@@ -197,6 +210,13 @@
                 showModal('Error de Configuración', 'Las variables FORM_URL y FORM_ENTRY_ID no han sido configuradas. Sigue los pasos de configuración.');
                 return;
             }
+
+            // **** NUEVA VALIDACIÓN: DEBE TENER EXACTAMENTE 20 CARACTERES ****
+            if (lastBarcode.length !== REQUIRED_LENGTH) {
+                showModal('Error de Validación', `El código de barras debe tener exactamente ${REQUIRED_LENGTH} caracteres para ser enviado. El código actual tiene ${lastBarcode.length} caracteres.`);
+                return; // Detiene el proceso de envío
+            }
+            // ***************************************************************
 
             isSending = true;
             sendButton.disabled = true;
@@ -259,5 +279,6 @@
     </script>
 </body>
 </html>
+
 
 
