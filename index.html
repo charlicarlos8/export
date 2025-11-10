@@ -141,9 +141,12 @@
                 }
             };
             
-            // Muestra mensaje de carga
+            // Muestra mensaje de carga y se asegura de que sea visible antes de Quagga.init
             const loadingDiv = document.querySelector('#interactive div');
-            if(loadingDiv) loadingDiv.textContent = 'Cargando Cámara...';
+            if(loadingDiv) {
+                loadingDiv.textContent = 'Cargando Cámara...';
+                loadingDiv.style.display = 'block'; 
+            }
 
 
             Quagga.init(config, function(err) {
@@ -151,11 +154,16 @@
                     console.error("Error al inicializar Quagga:", err);
                     errorMessageDisplay.textContent = 'Error al iniciar la cámara: ' + err.message + '. Asegúrate de tener una cámara trasera disponible.';
                     errorMessageDisplay.classList.remove('hidden');
-                    // Oculta el mensaje de carga en el viewporet
+                    // Oculta el mensaje de error en el viewport
                     if(loadingDiv) loadingDiv.textContent = 'Error: No se pudo acceder a la cámara.';
                     return;
                 }
+                
+                // **** MODIFICACIÓN SOLICITADA: OCULTAR MENSAJE UNA VEZ QUE LA CÁMARA INICIA ****
                 Quagga.start();
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                // *****************************************************************************
+
                 scannerRunning = true;
                 isQuaggaInitialized = true;
             });
@@ -173,6 +181,10 @@
                 Quagga.stop();
                 scannerRunning = false;
                 console.log("Escaneo exitoso y detenido. Código:", lastBarcode);
+                
+                // Asegurar que el mensaje de carga no reaparezca si se detiene (aunque ya está oculto)
+                const loadingDiv = document.querySelector('#interactive div');
+                if (loadingDiv) loadingDiv.style.display = 'none';
             }
         });
 
@@ -242,17 +254,8 @@
             document.getElementById('statusModal').classList.add('hidden');
         });
         
-        // Ocultar el mensaje de carga cuando Quagga inicia el video
-        Quagga.onImageProcessed(function(result) {
-            if (isQuaggaInitialized) {
-                const loadingDiv = document.querySelector('#interactive div');
-                if (loadingDiv && loadingDiv.textContent === 'Cargando Cámara...') {
-                    loadingDiv.style.display = 'none';
-                }
-            }
-        });
+        // Se ha eliminado el Quagga.onImageProcessed, ya que la lógica de ocultar el mensaje de carga se movió a Quagga.init
 
     </script>
 </body>
 </html>
-
