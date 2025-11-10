@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner a Google Sheets</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de la biblioteca ZXing (para escaneo de códigos) -->
+    <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+    <style>
+        /* Estilo personalizado para el video/cámara que se adaptará al contenedor */
+        #scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            aspect-ratio: 1 / 1; /* Cuadrado para una mejor vista móvil */
+            overflow: hidden;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        #scanner-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Asegura que el video llene el contenedor */
+            transform: scaleX(-1); /* Espejo para vista frontal más natural, si se usa cámara frontal */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 flex flex-col items-center font-sans">
+
+    <div class="w-full max-w-lg bg-white p-6 rounded-xl shadow-2xl space-y-6">
+        <h1 class="text-3xl font-extrabold text-blue-600 text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8 inline-block mr-2 align-text-bottom">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.5h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5m-16.5 2.25h16.5M7.5 4.5v16.5m3-16.5v16.5m3-16.5v16.5m3-16.5v16.5" />
+            </svg>
+            Escáner Móvil a Sheets
+        </h1>
+
+        <!-- Contenedor del Video de la Cámara -->
+        <div id="scanner-container">
+            <video id="scanner-video" class="w-full h-full object-cover" playsinline></video>
+        </div>
+
+        <!-- Resultados y Estado -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <p class="text-sm font-medium text-gray-500">Último Código Escaneado:</p>
+            <p id="barcode-result" class="text-2xl font-bold text-gray-800 break-words mt-1">Esperando escaneo...</p>
+        </div>
+
+        <!-- Indicador de Estado/Carga -->
+        <div id="status-message" class="p-3 rounded-lg text-center font-semibold transition duration-300 hidden"></div>
+
+        <!-- Botón de Control (Útil si la cámara no se inicia automáticamente) -->
+        <button id="start-scan-btn" class="w-full py-3 bg-green-500 text-white font-bold rounded-xl shadow-lg hover:bg-green-600 transition duration-150 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-green-300">
+            Iniciar Escaneo
+        </button>
+    </div>
+
+    <script>
+        // Configuración de Firebase para obtener el ID de la aplicación
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        // ***********************************************************************************
+        // IMPORTANTE: Reemplaza esta URL con la URL de tu Google Apps Script Desplegado.
+        // ***********************************************************************************
+        const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';
+        // ***********************************************************************************
+        
+        const codeReader = new ZXing.BrowserMultiFormatReader();
+        const videoElement = document.getElementById('scanner-video');
+        const resultElement = document.getElementById('barcode-result');
+        const statusElement = document.getElementById('status-message');
+        const startBtn = document.getElementById('start-scan-btn');
+
+        let isScanning = false;
+
+        // Función para mostrar mensajes de estado
+        function showStatus(message, type = 'info') {
+            statusElement.textContent = message;
+            statusElement.classList.remove('hidden', 'bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800', 'bg-blue-100', 'text-blue-800');
+
+            if (type === 'error') {
+                statusElement.classList.add('bg-red-100', 'text-red-800');
+            } else if (type === 'success') {
+                statusElement.classList.add('bg-green-100', 'text-green-800');
+            } else { // info/loading
+                statusElement.classList.add('bg-blue-100', 'text-blue-800');
+            }
+        }
+
+        // Función para enviar los datos a Google Sheets
+        async function sendToSheet(barcode) {
+            showStatus('Enviando código: ' + barcode + '...', 'info');
+
+            const dataToSend = {
+                barcode: barcode,
+                appId: appId,
+                // Agrega otros datos si los necesitas, como el ID de usuario, etc.
+            };
+
+            try {
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'cors', // Necesario para peticiones a Apps Script
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(dataToSend)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.status === 'success') {
+                         showStatus('¡Éxito! Datos guardados en la hoja.', 'success');
+                    } else {
+                         // Manejar error devuelto por el Apps Script (aunque el HTTP status fue 200)
+                         showStatus('Error al guardar datos: ' + result.message, 'error');
+                    }
+                } else {
+                    showStatus(`Error HTTP ${response.status}: No se pudo contactar el servidor.`, 'error');
+                }
+            } catch (error) {
+                console.error('Error de red al enviar datos:', error);
+                showStatus('Error de red: Verifica la conexión o la URL del script.', 'error');
+            }
+
+            // Reiniciar la etiqueta de resultado después del envío
+            resultElement.textContent = barcode;
+            setTimeout(() => {
+                // Volver a 'Esperando escaneo' un momento después.
+                if (!isScanning) {
+                    startScan(); // Reinicia el escaneo si se detuvo
+                }
+                resultElement.textContent = 'Esperando escaneo...';
+                statusElement.classList.add('hidden'); // Ocultar mensaje de estado
+            }, 3000);
+        }
+
+        // Función principal para iniciar la cámara y el escaneo
+        function startScan() {
+            if (isScanning) return;
+            isScanning = true;
+            startBtn.disabled = true;
+            startBtn.textContent = 'Escaneo en curso...';
+            showStatus('Cargando cámara...', 'info');
+
+            codeReader.getVideoInputDevices()
+                .then((videoInputDevices) => {
+                    // Elegir la cámara trasera si es posible, o la primera disponible.
+                    let selectedDeviceId;
+                    const backCamera = videoInputDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('trasera'));
+                    
+                    if (backCamera) {
+                        selectedDeviceId = backCamera.deviceId;
+                    } else if (videoInputDevices.length > 0) {
+                        selectedDeviceId = videoInputDevices[0].deviceId;
+                    }
+
+                    if (selectedDeviceId) {
+                        showStatus('Cámara lista. Apunta al código.', 'info');
+                        
+                        // Iniciar decodificación de video
+                        codeReader.decodeFromVideoDevice(selectedDeviceId, 'scanner-video', (result, err) => {
+                            if (result) {
+                                // Código escaneado con éxito
+                                codeReader.reset(); // Detener el escaneo para evitar múltiples lecturas
+                                isScanning = false;
+                                startBtn.disabled = false;
+                                startBtn.textContent = 'Iniciar Escaneo';
+
+                                const barcode = result.getText();
+                                console.log('Código detectado:', barcode);
+
+                                // Enviar datos y luego reiniciar el proceso
+                                sendToSheet(barcode);
+                            }
+
+                            if (err && !(err instanceof ZXing.NotFoundException)) {
+                                // console.error(err); // Se esperan muchos NotFoundException, solo loguear otros errores
+                            }
+                        });
+                    } else {
+                        showStatus('Error: No se encontraron cámaras.', 'error');
+                        startBtn.disabled = false;
+                        startBtn.textContent = 'Iniciar Escaneo';
+                        isScanning = false;
+                    }
+                })
+                .catch((err) => {
+                    console.error('Error al acceder a la cámara:', err);
+                    showStatus('Error de Permiso: Habilita el acceso a la cámara.', 'error');
+                    startBtn.disabled = false;
+                    startBtn.textContent = 'Iniciar Escaneo';
+                    isScanning = false;
+                });
+        }
+
+        // Evento para iniciar el escaneo al hacer clic en el botón
+        startBtn.addEventListener('click', startScan);
+
+        // Intentar iniciar el escaneo al cargar la página
+        window.addEventListener('load', startScan);
+        
+    </script>
+</body>
+</html>
